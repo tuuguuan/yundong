@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>防晕车实验助手</title>
+    
+    <!-- 引入 Tailwind CSS 样式库 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- 引入 React 和 Babel -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- 引入 Excel 处理库 (XLSX) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+    <style>
+        /* 防止手机端点击产生高亮背景 */
+        * { -webkit-tap-highlight-color: transparent; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // --- 简易图标组件 ---
+        const IconBase = ({ children, className }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{children}</svg>
+        );
+        const Play = ({className}) => <IconBase className={className}><polygon points="5 3 19 12 5 21 5 3"></polygon></IconBase>;
+        const Save = ({className}) => <IconBase className={className}><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></IconBase>;
+        const FileText = ({className}) => <IconBase className={className}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></IconBase>;
+        const Activity = ({className}) => <IconBase className={className}><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></IconBase>;
+        const Settings = ({className}) => <IconBase className={className}><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></IconBase>;
+        const ChevronLeft = ({className}) => <IconBase className={className}><polyline points="15 18 9 12 15 6"></polyline></IconBase>;
+        const ChevronRight = ({className}) => <IconBase className={className}><polyline points="9 18 15 12 9 6"></polyline></IconBase>;
+        const Upload = ({className}) => <IconBase className={className}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></IconBase>;
+        const AlertCircle = ({className}) => <IconBase className={className}><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></IconBase>;
+        const Edit = ({className}) => <IconBase className={className}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></IconBase>;
+
+        // -----------------------------------------------------------------------------
+        // 图表组件
+        // -----------------------------------------------------------------------------
+        const SimpleLineChart = ({ data, title, color = "#3b82f6" }) => {
+            if (!data || data.length === 0) {
+                return (
+                    <div className="flex items-center justify-center h-32 bg-gray-50 border-2 border-dashed border-gray-200 rounded-lg">
+                        <span className="text-gray-400 text-xs">{title} - 暂无数据</span>
+                    </div>
+                );
+            }
+
+            const width = 300;
+            const height = 120;
+            const padding = 10;
+            const maxScore = 8;
+            const minScore = 0;
+
+            const points = data.map((d, i) => {
+                const x = padding + (i / (data.length - 1 || 1)) * (width - 2 * padding);
+                const y = height - padding - ((d.score - minScore) / (maxScore - minScore)) * (height - 2 * padding);
+                return `${x},${y}`;
+            }).join(' ');
+
+            return (
+                <div className="w-full bg-white p-2 rounded-lg shadow-sm border border-gray-100 mb-2">
+                    <h4 className="text-xs font-bold text-gray-500 mb-1">{title}</h4>
+                    <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto overflow-visible">
+                        <line x1={padding} y1={padding} x2={padding} y2={height - padding} stroke="#ddd" strokeWidth="1" />
+                        <line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} stroke="#ddd" strokeWidth="1" />
+                        <polyline fill="none" stroke={color} strokeWidth="2" points={points} />
+                        {data.map((d, i) => {
+                            const x = padding + (i / (data.length - 1 || 1)) * (width - 2 * padding);
+                            const y = height - padding - ((d.score - minScore) / (maxScore - minScore)) * (height - 2 * padding);
+                            return <circle key={i} cx={x} cy={y} r="3" fill={color} />;
+                        })}
+                    </svg>
+                </div>
+            );
+        };
+
+        // -----------------------------------------------------------------------------
+        // 可折叠配置组件
+        // -----------------------------------------------------------------------------
+        const ConfigSection = ({ title, isOpen, onToggle, children }) => (
+            <div className="border border-gray-200 rounded-lg overflow-hidden mb-4">
+                <button onClick={onToggle} className="w-full flex items-center justify-between p-3 bg-gray-50 hover:bg-gray-100 transition-colors">
+                    <span className="font-semibold text-sm text-gray-700">{title}</span>
+                    <span className="text-gray-400 text-xs">{isOpen ? '收起' : '编辑'}</span>
+                </button>
+                {isOpen && <div className="p-3 bg-white border-t border-gray-100">{children}</div>}
+            </div>
+        );
+
+        // -----------------------------------------------------------------------------
+        // 主程序
+        // -----------------------------------------------------------------------------
+        function App() {
+            const [appState, setAppState] = useState('config');
+            
+            // --- 配置状态 ---
+            const [insertInterval, setInsertInterval] = useState(5);
+            const [startDelayMinutes, setStartDelayMinutes] = useState(0);
+            
+            // 标准问题配置 (问卷中插入)
+            const [standardText, setStandardText] = useState("【插入问题】请你为当前感受到的晕车趋势打分");
+            const [standardOptions, setStandardOptions] = useState(["1分", "2分", "3分", "4分", "5分", "6分", "7分", ">7分"]);
+            
+            // 弹窗问题配置 (定时弹出)
+            const [popupQuestionText, setPopupQuestionText] = useState("请为您当前的晕车程度打分");
+            const [popupOptions, setPopupOptions] = useState([
+                "0分 - 无感", "1分 - 轻微不适", "2分 - 胃部不适", "3分 - 轻微恶心", 
+                "4分 - 明显恶心", "5分 - 强烈恶心", "6分 - 想要呕吐", "7分 - 无法坚持"
+            ]);
+
+            // UI 状态控制
+            const [editSection, setEditSection] = useState(null); // 'standard' | 'popup' | null
+
+            // --- 数据状态 ---
+            const [rawSurveyQuestions, setRawSurveyQuestions] = useState([]);
+            const [processedQuestions, setProcessedQuestions] = useState([]);
+            const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+            
+            // 记录回答: { index: { answer: string, time: string, score?: number } }
+            const [surveyAnswers, setSurveyAnswers] = useState({}); 
+            const [isSurveyActive, setIsSurveyActive] = useState(false);
+
+            const [experimentStartTime, setExperimentStartTime] = useState(null);
+            const [currentTimeStr, setCurrentTimeStr] = useState("00:00");
+            
+            // 日志数据
+            const [popupLogs, setPopupLogs] = useState([]); // 弹窗记录
+            const [popupCumulative, setPopupCumulative] = useState(0);
+            
+            const [standardLogs, setStandardLogs] = useState([]); // 标准题记录
+            const [standardCumulative, setStandardCumulative] = useState(0);
+
+            // 计时器
+            const [showPopup, setShowPopup] = useState(false);
+            const popupTimerRef = useRef(null);
+            const experimentTimerRef = useRef(null);
+
+            // -------------------------------------------------------------------------
+            // 逻辑处理
+            // -------------------------------------------------------------------------
+
+            const handleFileUpload = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = (evt) => {
+                    const bstr = evt.target.result;
+                    const wb = XLSX.read(bstr, { type: 'binary' });
+                    const wsname = wb.SheetNames[0];
+                    const ws = wb.Sheets[wsname];
+                    const data = XLSX.utils.sheet_to_json(ws, { header: 1 });
+                    
+                    const formatted = data.filter(row => row.length >= 2).map(row => ({
+                        question: row[0],
+                        options: [row[1], row[2], row[3], row[4]].filter(Boolean),
+                        type: 'normal'
+                    }));
+
+                    setRawSurveyQuestions(formatted);
+                    alert(`成功读取 ${formatted.length} 道题目`);
+                };
+                reader.readAsBinaryString(file);
+            };
+
+            const handleOptionChange = (type, index, value) => {
+                if (type === 'standard') {
+                    const newOpts = [...standardOptions];
+                    newOpts[index] = value;
+                    setStandardOptions(newOpts);
+                } else {
+                    const newOpts = [...popupOptions];
+                    newOpts[index] = value;
+                    setPopupOptions(newOpts);
+                }
+            };
+
+            const generateQuestionQueue = () => {
+                if (rawSurveyQuestions.length === 0) {
+                    alert("请先上传问卷Excel文件");
+                    return false;
+                }
+
+                let queue = [];
+                let normalCount = 0;
+                
+                // 构建标准题对象
+                const standardQuestion = {
+                    question: standardText,
+                    options: [...standardOptions],
+                    type: 'standard'
+                };
+
+                rawSurveyQuestions.forEach((q) => {
+                    queue.push(q);
+                    normalCount++;
+                    if (normalCount % insertInterval === 0) {
+                        queue.push(standardQuestion);
+                    }
+                });
+
+                setProcessedQuestions(queue);
+                return true;
+            };
+
+            const startExperiment = () => {
+                if (!generateQuestionQueue()) return;
+
+                const startTime = Date.now();
+                setExperimentStartTime(startTime);
+                setAppState('running');
+                
+                experimentTimerRef.current = setInterval(() => {
+                    const now = Date.now();
+                    const diff = Math.floor((now - startTime) / 1000);
+                    const min = String(Math.floor(diff / 60)).padStart(2, '0');
+                    const sec = String(diff % 60).padStart(2, '0');
+                    setCurrentTimeStr(`${min}:${sec}`);
+
+                    const minutesPassed = diff / 60;
+                    if (minutesPassed >= startDelayMinutes && !isSurveyActive) {
+                        setIsSurveyActive(true);
+                    }
+                }, 1000);
+
+                scheduleNextPopup();
+            };
+
+            const scheduleNextPopup = () => {
+                popupTimerRef.current = setTimeout(() => {
+                    setShowPopup(true);
+                    triggerVibration();
+                }, 60000);
+            };
+
+            const triggerVibration = () => {
+                if (navigator.vibrate) {
+                    navigator.vibrate([500, 200, 500]);
+                }
+            };
+
+            // 处理弹窗回答
+            const handlePopupSubmit = (scoreIndex) => {
+                const score = scoreIndex; // 假设选项顺序对应0-7分
+                const newCumulative = popupCumulative + score;
+                setPopupCumulative(newCumulative);
+
+                const logEntry = {
+                    time: currentTimeStr,
+                    score: score,
+                    cumulative: newCumulative
+                };
+                
+                setPopupLogs(prev => [...prev, logEntry]);
+                setShowPopup(false);
+                scheduleNextPopup();
+            };
+
+            // 处理问卷回答
+            const handleSurveyAnswer = (answer, optionIndex) => {
+                const currentQ = processedQuestions[currentQuestionIndex];
+                const nowTime = currentTimeStr;
+                let score = 0;
+
+                // 记录回答数据
+                const record = {
+                    answer: answer,
+                    time: nowTime
+                };
+
+                // 如果是标准题，记录分数逻辑
+                if (currentQ.type === 'standard' || currentQ.type === 'standard_loop') {
+                    score = optionIndex; // 假设选项顺序对应0-7分
+                    record.score = score;
+                    
+                    // 更新标准题统计
+                    const newCum = standardCumulative + score;
+                    setStandardCumulative(newCum);
+                    setStandardLogs(prev => [...prev, {
+                        time: nowTime,
+                        score: score,
+                        cumulative: newCum
+                    }]);
+                }
+
+                setSurveyAnswers(prev => ({
+                    ...prev,
+                    [currentQuestionIndex]: record
+                }));
+
+                // 页面跳转逻辑
+                setTimeout(() => {
+                    const nextIndex = currentQuestionIndex + 1;
+                    
+                    // 如果已经是最后一题，或者超过了
+                    if (nextIndex >= processedQuestions.length) {
+                        // 动态添加一个新的标准题，实现无限循环
+                        const loopStandardQuestion = {
+                            question: standardText + " (循环监测)",
+                            options: [...standardOptions],
+                            type: 'standard_loop' // 标记为循环题
+                        };
+                        setProcessedQuestions(prev => [...prev, loopStandardQuestion]);
+                    }
+                    
+                    setCurrentQuestionIndex(nextIndex);
+                }, 200);
+            };
+
+            const finishExperiment = () => {
+                clearInterval(experimentTimerRef.current);
+                clearTimeout(popupTimerRef.current);
+                setAppState('finished');
+            };
+
+            const exportData = () => {
+                const wb = XLSX.utils.book_new();
+
+                // 1. 弹窗打分记录
+                const logData = popupLogs.map(l => ({
+                    "实验时间": l.time,
+                    "单次得分": l.score,
+                    "累加得分": l.cumulative
+                }));
+                const wsLogs = XLSX.utils.json_to_sheet(logData);
+                XLSX.utils.book_append_sheet(wb, wsLogs, "弹窗评分记录");
+
+                // 2. 问卷详细结果
+                const surveyData = processedQuestions
+                    .slice(0, currentQuestionIndex + 1) // 只导出已回答或显示的
+                    .map((q, idx) => {
+                        const ans = surveyAnswers[idx];
+                        return {
+                            "题号": idx + 1,
+                            "题目类型": q.type === 'standard' ? "插入标准题" : (q.type === 'standard_loop' ? "循环标准题" : "普通问卷题"),
+                            "题目内容": q.question,
+                            "作答时间": ans ? ans.time : "未作答",
+                            "选择答案": ans ? ans.answer : "未作答",
+                            "得分(仅标准题)": ans && ans.score !== undefined ? ans.score : "-"
+                        };
+                    });
+                const wsSurvey = XLSX.utils.json_to_sheet(surveyData);
+                XLSX.utils.book_append_sheet(wb, wsSurvey, "问卷详细记录");
+                
+                // 3. 标准题趋势记录 (专门的Sheet)
+                const stdLogData = standardLogs.map(l => ({
+                    "实验时间": l.time,
+                    "单次得分": l.score,
+                    "累加得分": l.cumulative
+                }));
+                const wsStdLogs = XLSX.utils.json_to_sheet(stdLogData);
+                XLSX.utils.book_append_sheet(wb, wsStdLogs, "标准题评分记录");
+
+                XLSX.writeFile(wb, `实验数据_${new Date().toISOString().slice(0,10)}.xlsx`);
+            };
+
+            // -------------------------------------------------------------------------
+            // 界面渲染
+            // -------------------------------------------------------------------------
+
+            if (appState === 'config') {
+                return (
+                    <div className="min-h-screen bg-gray-100 p-4 font-sans text-gray-800 pb-20">
+                        <div className="bg-white rounded-xl shadow-lg p-6 max-w-md mx-auto">
+                            <h1 className="text-2xl font-bold text-blue-600 mb-6 flex items-center">
+                                <Settings className="mr-2" /> 实验配置
+                            </h1>
+                            
+                            {/* 文件上传 */}
+                            <div className="mb-6">
+                                <label className="block text-sm font-semibold mb-2">1. 导入问卷 (.xlsx)</label>
+                                <div className="relative border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:bg-blue-50 transition-colors">
+                                    <input type="file" accept=".xlsx, .xls" onChange={handleFileUpload} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+                                    <div className="flex flex-col items-center pointer-events-none">
+                                        <Upload className="text-gray-400 mb-2" />
+                                        <span className="text-sm text-gray-500">{rawSurveyQuestions.length > 0 ? `已加载 ${rawSurveyQuestions.length} 道题` : "点击选择文件"}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* 基础参数 */}
+                            <div className="mb-6 grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-500 mb-1">插入间隔 (题)</label>
+                                    <input type="number" value={insertInterval} onChange={(e) => setInsertInterval(Number(e.target.value))} className="w-full p-2 border rounded text-center" />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-500 mb-1">启动延时 (分)</label>
+                                    <input type="number" value={startDelayMinutes} onChange={(e) => setStartDelayMinutes(Number(e.target.value))} className="w-full p-2 border rounded text-center" />
+                                </div>
+                            </div>
+
+                            {/* 高级配置区域 */}
+                            <label className="block text-sm font-semibold mb-2">2. 问题内容编辑</label>
+                            
+                            {/* 标准问题配置 */}
+                            <ConfigSection 
+                                title="标准插值/循环问题配置" 
+                                isOpen={editSection === 'standard'} 
+                                onToggle={() => setEditSection(editSection === 'standard' ? null : 'standard')}
+                            >
+                                <div className="space-y-3">
+                                    <div>
+                                        <label className="text-xs text-gray-500">题目文本</label>
+                                        <input type="text" value={standardText} onChange={(e) => setStandardText(e.target.value)} className="w-full p-2 border rounded text-sm" />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs text-gray-500 mb-1 block">8个选项 (对应0-7分)</label>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            {standardOptions.map((opt, i) => (
+                                                <input key={i} type="text" value={opt} onChange={(e) => handleOptionChange('standard', i, e.target.value)} className="p-1 border rounded text-xs" placeholder={`选项${i+1}`} />
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            </ConfigSection>
+
+                            {/* 弹窗问题配置 */}
+                            <ConfigSection 
+                                title="定时弹窗问题配置" 
+                                isOpen={editSection === 'popup'} 
+                                onToggle={() => setEditSection(editSection === 'popup' ? null : 'popup')}
+                            >
+                                <div className="space-y-3">
+                                    <div>
+                                        <label className="text-xs text-gray-500">题目文本</label>
+                                        <input type="text" value={popupQuestionText} onChange={(e) => setPopupQuestionText(e.target.value)} className="w-full p-2 border rounded text-sm" />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs text-gray-500 mb-1 block">8个选项 (对应0-7分)</label>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            {popupOptions.map((opt, i) => (
+                                                <input key={i} type="text" value={opt} onChange={(e) => handleOptionChange('popup', i, e.target.value)} className="p-1 border rounded text-xs" placeholder={`选项${i+1}`} />
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            </ConfigSection>
+
+                            <button onClick={startExperiment} className={`w-full py-4 rounded-xl text-white font-bold text-lg shadow-md transition-transform active:scale-95 flex items-center justify-center ${rawSurveyQuestions.length > 0 ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-400 cursor-not-allowed'}`}>
+                                <Play className="mr-2" /> 开始实验
+                            </button>
+                        </div>
+                    </div>
+                );
+            }
+
+            if (appState === 'running') {
+                const currentQ = processedQuestions[currentQuestionIndex];
+                // 防止渲染未准备好的题目
+                if (!currentQ) return <div className="p-10 text-center">加载中...</div>;
+
+                const isStandard = currentQ.type === 'standard' || currentQ.type === 'standard_loop';
+
+                return (
+                    <div className="min-h-screen bg-gray-100 flex flex-col relative overflow-hidden">
+                        {/* 顶部栏 */}
+                        <div className="bg-white p-3 shadow-sm flex justify-between items-center z-10">
+                            <div className="flex flex-col">
+                                <div className="flex items-center text-blue-600 font-mono text-xl font-bold">
+                                    <Activity className="mr-2 w-5 h-5" />
+                                    {currentTimeStr}
+                                </div>
+                                <div className="text-xs text-gray-400">
+                                    弹窗累积: {popupCumulative} | 标准题累积: {standardCumulative}
+                                </div>
+                            </div>
+                            <button onClick={finishExperiment} className="bg-red-100 text-red-600 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center">
+                                <Save className="mr-1 w-4 h-4" /> 结束
+                            </button>
+                        </div>
+
+                        {/* 问卷区域 */}
+                        <div className="flex-1 p-3 overflow-y-auto pb-48">
+                            {!isSurveyActive ? (
+                                <div className="h-full flex flex-col items-center justify-center text-gray-400">
+                                    <Activity className="w-16 h-16 mb-4 opacity-20" />
+                                    <p>实验进行中...</p>
+                                    <p className="text-sm mt-2">问卷将在实验开始 {startDelayMinutes} 分钟后启动</p>
+                                </div>
+                            ) : (
+                                <div className={`rounded-2xl shadow-sm p-4 min-h-[50vh] flex flex-col justify-between transition-all duration-300 ${isStandard ? 'bg-amber-50 border-2 border-amber-200' : 'bg-white'}`}>
+                                    <div>
+                                        <div className="flex justify-between text-xs text-gray-400 mb-4">
+                                            <span>#{currentQuestionIndex + 1}</span>
+                                            <span className={`font-bold ${isStandard ? 'text-amber-600' : 'text-gray-400'}`}>
+                                                {isStandard ? (currentQ.type === 'standard_loop' ? '∞ 循环监测模式' : '★ 标准评估') : '普通问卷'}
+                                            </span>
+                                        </div>
+                                        <h2 className="text-lg font-bold text-gray-800 mb-6 leading-relaxed">{currentQ.question}</h2>
+                                        <div className="space-y-2">
+                                            {currentQ.options.map((opt, idx) => {
+                                                const record = surveyAnswers[currentQuestionIndex];
+                                                const isSelected = record && record.answer === opt;
+                                                return (
+                                                    <button key={idx} onClick={() => handleSurveyAnswer(opt, idx)} className={`w-full p-3 text-left rounded-xl border transition-all text-sm ${isSelected ? 'bg-blue-50 border-blue-500 text-blue-700 font-semibold shadow-inner' : 'bg-white border-gray-200 hover:bg-gray-50'}`}>
+                                                        <div className="flex items-center">
+                                                            <div className={`w-5 h-5 rounded-full border flex items-center justify-center mr-3 ${isSelected ? 'border-blue-500 bg-blue-500 text-white' : 'border-gray-300'}`}>{isSelected && <span className="text-xs">✓</span>}</div>
+                                                            {opt}
+                                                        </div>
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                    {isStandard && (
+                                        <div className="mt-4 text-xs text-amber-600 text-center">
+                                            * 请根据当前感受打分，选择后将自动跳转
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* 底部双图表 */}
+                        <div className="bg-white border-t p-2 pb-6 z-10 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+                            <SimpleLineChart data={popupLogs} title="定时弹窗评分趋势" color="#3b82f6" />
+                            <SimpleLineChart data={standardLogs} title="问卷标准题评分趋势" color="#d97706" />
+                        </div>
+
+                        {/* 弹窗 Overlay */}
+                        {showPopup && (
+                            <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+                                <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+                                    <div className="bg-red-50 p-4 border-b border-red-100 flex items-center text-red-700">
+                                        <AlertCircle className="w-6 h-6 mr-2 animate-pulse" />
+                                        <span className="font-bold">请立即作答</span>
+                                    </div>
+                                    <div className="p-6">
+                                        <h3 className="text-lg font-bold text-gray-800 mb-4">{popupQuestionText}</h3>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            {popupOptions.map((opt, idx) => (
+                                                <button key={idx} onClick={() => handlePopupSubmit(idx)} className="p-3 bg-gray-50 hover:bg-blue-50 border border-gray-200 hover:border-blue-300 rounded-lg text-sm text-center transition-colors">{opt}</button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                );
+            }
+
+            if (appState === 'finished') {
+                return (
+                    <div className="min-h-screen bg-green-50 flex flex-col items-center justify-center p-6 text-center">
+                        <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md">
+                            <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-6"><Save className="w-10 h-10" /></div>
+                            <h1 className="text-2xl font-bold text-gray-800 mb-2">实验结束</h1>
+                            <p className="text-gray-500 mb-8">数据采集已停止，请导出数据。</p>
+                            <button onClick={exportData} className="w-full bg-green-600 text-white py-4 rounded-xl font-bold text-lg shadow-lg hover:bg-green-700 flex items-center justify-center mb-4"><FileText className="mr-2" /> 导出 Excel 数据</button>
+                            <button onClick={() => window.location.reload()} className="text-gray-400 text-sm underline">返回首页 (数据将清空)</button>
+                        </div>
+                    </div>
+                );
+            }
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
